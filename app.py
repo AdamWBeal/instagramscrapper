@@ -1,6 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
@@ -29,33 +30,36 @@ def lord_giveth_formatting(text):
         return int(float((text.replace(',', '').replace('k','')))*1000)
 
 def get_profile_data(profiles,tag):
-    print profiles
-    base_url = "https://www.instagram.com/"
+    print(profiles)
     profile_dict = []
     for stuff in profiles:
-        r = requests.get(base_url+stuff+'/')
-        soup = BeautifulSoup(r.content, "html5lib")
-        script = soup.find('script', text=re.compile('window\._sharedData'))
-        json_text = re.search(r'^\s*window\._sharedData\s*=\s*({.*?})\s*;\s*$',script.string, flags=re.DOTALL | re.MULTILINE).group(1)
-        data = json.loads(json_text)
-        #print json.dumps(data, indent=4, sort_keys=True)
-        insta_id = data["entry_data"]["ProfilePage"][0]["user"]["id"]
-        username = data["entry_data"]["ProfilePage"][0]["user"]["username"]
-        emails = get_emails(data["entry_data"]["ProfilePage"][0]["user"]["biography"])
-        email=''
-        usr_url = data["entry_data"]["ProfilePage"][0]["user"]["external_url"]
-        bio = data["entry_data"]["ProfilePage"][0]["user"]["biography"]
-        followers = data["entry_data"]["ProfilePage"][0]["user"]["followed_by"]["count"]
-        following = data["entry_data"]["ProfilePage"][0]["user"]["follows"]["count"]
-        full_name = data["entry_data"]["ProfilePage"][0]["user"]["full_name"]
-        media_count = data["entry_data"]["ProfilePage"][0]["user"]["media"]["count"]
-        profile_pic = data["entry_data"]["ProfilePage"][0]["user"]["profile_pic_url_hd"]
-        for ema in emails:
-            email=ema.decode("utf-8", "strict")
-            print type(email+" ")
-            print email
-            break
-        profile_dict.append({'insta_id':insta_id, 'username':username, 'profile_url': usr_url, 'full_name':full_name, 'bio':bio, 'followers':followers,'following':following, 'media_count':media_count, 'tag':tag,'email':email})
+        try:
+            r = requests.get(stuff)
+            soup = BeautifulSoup(r.content, "html5lib")
+            script = soup.find('script', text=re.compile('window\._sharedData'))
+            json_text = re.search(r'^\s*window\._sharedData\s*=\s*({.*?})\s*;\s*$',script.string, flags=re.DOTALL | re.MULTILINE).group(1)
+            data = json.loads(json_text)
+            #print json.dumps(data, indent=4, sort_keys=True)
+            insta_id = data["entry_data"]["ProfilePage"][0]["user"]["id"]
+            username = data["entry_data"]["ProfilePage"][0]["user"]["username"]
+            emails = get_emails(data["entry_data"]["ProfilePage"][0]["user"]["biography"])
+            email=''
+            usr_url = data["entry_data"]["ProfilePage"][0]["user"]["external_url"]
+            bio = data["entry_data"]["ProfilePage"][0]["user"]["biography"]
+            followers = data["entry_data"]["ProfilePage"][0]["user"]["followed_by"]["count"]
+            following = data["entry_data"]["ProfilePage"][0]["user"]["follows"]["count"]
+            full_name = data["entry_data"]["ProfilePage"][0]["user"]["full_name"]
+            media_count = data["entry_data"]["ProfilePage"][0]["user"]["media"]["count"]
+            profile_pic = data["entry_data"]["ProfilePage"][0]["user"]["profile_pic_url_hd"]
+            for ema in emails:
+
+                # email=ema.decode("utf-8", "strict")
+                print(type(email+" "))
+                print(email)
+                break
+            profile_dict.append({'insta_id':insta_id, 'username':username, 'profile_url': usr_url, 'full_name':full_name, 'bio':bio, 'followers':followers,'following':following, 'media_count':media_count, 'tag':tag,'email':email})
+        except:
+            print("Failed:" + str(data))
     #pd.DataFrame(profile_dict).to_csv(tag,encoding = "utf-8")
     return profile_dict
 
@@ -65,54 +69,68 @@ def get_profile_data(profiles,tag):
 @app.route('/', methods=['GET', 'POST'])
 def login():
     form = InstaForm()
-    return render_template('funk.html', 
+    return render_template('funk.html',
                            title='Sign In',
                            form=form)
 
 @app.route('/results',methods=['GET', 'POST'])
 def hello_buck():
-    print request.form
+    print(request.form)
     form = InstaForm(request.form)
-    driver = webdriver.Chrome('/home/amnox/Projects/Scraping/Selenium/chromedriver')
+    driver = webdriver.Chrome('/usr/local/bin/chromedriver')
     driver.implicitly_wait(10)
     booga = []
     tags = (form.name.data).split(",")
     posts_to_dig = form.depth.data
     thresh_hold = form.min_likes.data
 
-    for shit in tags:
+    for hashtag in tags:
         media = []
         profiles = []
-        
-        driver.get("https://www.instagram.com/explore/tags/"+shit)
-        elem = driver.find_element_by_xpath("//*[@id='react-root']/section/main/article/div[2]/a")
-        elem.click()
+
+        driver.get("https://www.instagram.com/explore/tags/"+hashtag)
+        # elem = driver.find_element_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div/a")
+        # elem.click()
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         while len(media)<=posts_to_dig:
             media = driver.find_elements_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div")
 
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            try:
+                driver.find_element_by_xpath("//a[text()='Load more']").click()
+            except NoSuchElementException:
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
         for dish in media:
-            ActionChains(driver).move_to_element(dish).perform()
-            #WebDriverWait(driver, 10).until(EC.presence_of_element_located(shit.find_element_by_xpath("//a/div/ul/li/span")))
-            likes_count = lord_giveth_formatting(dish.find_element_by_xpath("//a/div/ul/li/span").get_attribute('innerHTML'))
-            if likes_count<thresh_hold:
-                media.pop(media.index(dish))
-                continue
+            # ActionChains(driver).move_to_element(dish).perform()
             dish.click()
-            element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[3]/div/div[2]/div/div[2]/div/article/header/div/a[@href]")))
-            profiles.append(element.get_attribute('innerHTML'))
+            popup = driver.find_element_by_xpath("//body/div/div/div/div/article")
+            #WebDriverWait(driver, 10).until(EC.presence_of_element_located(hashtag.find_element_by_xpath("//a/div/ul/li/span")))
+
+            # IF YOU WANT TO IMPOSE A MINIMUM LIKE COUNT
+            # try:
+            #     likes_count = lord_giveth_formatting(popup.find_element_by_xpath("//div/section/div/span/span").get_attribute('innerHTML'))
+            #     if likes_count<thresh_hold:
+            #         media.pop(media.index(dish))
+            #         continue
+            #     name = popup.find_element_by_xpath("//header/div/div/div/a")
+            #     profiles.append(name.get_attribute("href"))
+            # except NoSuchElementException:
+            #     print("Oh well")
+                # element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[3]/div/div[2]/div/div[2]/div/article/header/div/a[@href]")))
             #element.click()
-            #driver.back()
+            # driver.back()
+
+            # GRAB THE PROFILE REGARDLESS OF MINIMUM
+            profiles.append(popup.find_element_by_xpath("//header/div/div/div/a").get_attribute("href"))
             driver.back()
             #driver.find_element_by_xpath("/html/body/div[3]/div/div[2]/div/div[2]/div/article/header").click()
-        booga.extend(get_profile_data(list(set(profiles)),shit))
+        booga.extend(get_profile_data(list(set(profiles)),hashtag))
 
     driver.close()
     csv = pd.DataFrame(booga).to_csv(encoding = "utf-8")
     response = make_response(csv)
     cd = 'attachment; filename=mycsv.csv'
-    response.headers['Content-Disposition'] = cd 
+    response.headers['Content-Disposition'] = cd
     response.mimetype='text/csv'
 
     return response
