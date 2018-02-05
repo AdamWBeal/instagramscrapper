@@ -1,3 +1,5 @@
+import time
+import random
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -86,13 +88,15 @@ def hello_buck():
 
     for hashtag in tags:
         media = []
-        profiles = []
+        # profiles = []
+        posts = {}
 
         driver.get("https://www.instagram.com/explore/tags/"+hashtag)
         # elem = driver.find_element_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div/a")
         # elem.click()
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         while len(media)<=posts_to_dig:
+            print(len(media))
             media = driver.find_elements_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div")
 
             try:
@@ -102,35 +106,58 @@ def hello_buck():
 
         for dish in media:
             # ActionChains(driver).move_to_element(dish).perform()
+            link_to_post = dish.find_element_by_xpath("//a").get_attribute("href")
             dish.click()
             popup = driver.find_element_by_xpath("//body/div/div/div/div/article")
             #WebDriverWait(driver, 10).until(EC.presence_of_element_located(hashtag.find_element_by_xpath("//a/div/ul/li/span")))
 
             # IF YOU WANT TO IMPOSE A MINIMUM LIKE COUNT
-            # try:
-            #     likes_count = lord_giveth_formatting(popup.find_element_by_xpath("//div/section/div/span/span").get_attribute('innerHTML'))
-            #     if likes_count<thresh_hold:
-            #         media.pop(media.index(dish))
-            #         continue
-            #     name = popup.find_element_by_xpath("//header/div/div/div/a")
-            #     profiles.append(name.get_attribute("href"))
-            # except NoSuchElementException:
-            #     print("Oh well")
-                # element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[3]/div/div[2]/div/div[2]/div/article/header/div/a[@href]")))
+            try:
+                likes_count = lord_giveth_formatting(popup.find_element_by_xpath("//div/section/div/span/span").get_attribute('innerHTML'))
+                if likes_count<thresh_hold:
+                    media.pop(media.index(dish))
+                    continue
+                else:
+                    while True:
+
+                        try:
+                            load_more_comments = popup.find_element_by_xpath("//div/div/ul/li/a[text()[contains(.,' comments')]]")
+                            driver.execute_script("document.querySelector('body div div div div article div div ul li a[role=button]').scrollIntoView(true);")
+
+                            load_more_comments.click()
+                            time.sleep(random.randint(.5,5))
+                        except:
+                            break
+                    post_id = link_to_post  # Todo: extract ID from link?
+
+                    # For videos, this grabs VIEWS.  For photos, this grabs LIKES.
+                    # metadata["views"] = popup.find_element_by_xpath("//div/section/div/span/span").get_attribute("innerHTML")
+
+                    comments = []
+                    for comment in popup.find_elements_by_xpath("//div/div/ul/li/span"):
+                        comments.append(comment.get_attribute("text"))
+                    posts[post_id] = comments
+                    temp = pd.DataFrame.from_dict(posts)
+                    temp.to_csv('{}.csv'.format(post_id))
+                    count += 1
+                # name = popup.find_element_by_xpath("//header/div/div/div/a")
+                # profiles.append(name.get_attribute("href"))
+            except NoSuchElementException:
+                continue
+            finally:
+                driver.back()
+            #element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[3]/div/div[2]/div/div[2]/div/article/header/div/a[@href]")))
             #element.click()
             # driver.back()
 
-            # GRAB THE PROFILE REGARDLESS OF MINIMUM
-            profiles.append(popup.find_element_by_xpath("//header/div/div/div/a").get_attribute("href"))
-            driver.back()
             #driver.find_element_by_xpath("/html/body/div[3]/div/div[2]/div/div[2]/div/article/header").click()
-        booga.extend(get_profile_data(list(set(profiles)),hashtag))
+        # booga.extend(get_profile_data(list(set(profiles)),hashtag))
 
     driver.close()
-    csv = pd.DataFrame(booga).to_csv(encoding = "utf-8")
+    csv = pd.DataFrame(posts).to_csv(encoding="utf-8")
     response = make_response(csv)
     cd = 'attachment; filename=mycsv.csv'
     response.headers['Content-Disposition'] = cd
-    response.mimetype='text/csv'
+    response.mimetype = 'text/csv'
 
     return response
