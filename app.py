@@ -1,4 +1,5 @@
 import time
+import datetime
 import random
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -14,7 +15,14 @@ import pandas as pd
 from flask import Flask,render_template,request,make_response
 from .InstaForm import InstaForm
 import re
+import timeit
+import pickle
+
+start = timeit.default_timer()
+
 app = Flask(__name__)
+
+posts = {}
 
 def get_emails(s):
     regex = re.compile(("([a-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_`"
@@ -43,7 +51,7 @@ def get_profile_data(profiles,tag):
             data = json.loads(json_text)
             #print json.dumps(data, indent=4, sort_keys=True)
             insta_id = data["entry_data"]["ProfilePage"][0]["user"]["id"]
-            username = data["entry_data"]["ProfilePage"][0]["user"]["username"]
+            username = d3ata["entry_data"]["ProfilePage"][0]["user"]["username"]
             emails = get_emails(data["entry_data"]["ProfilePage"][0]["user"]["biography"])
             email=''
             usr_url = data["entry_data"]["ProfilePage"][0]["user"]["external_url"]
@@ -86,65 +94,110 @@ def hello_buck():
     posts_to_dig = form.depth.data
     thresh_hold = form.min_likes.data
 
-    for hashtag in tags:
-        media = []
-        # profiles = []
-        posts = {}
 
-        driver.get("https://www.instagram.com/explore/tags/"+hashtag)
+    for hashtag in tags:
+        media = ['https://www.instagram.com/p/BevWWJyhJvi/?tagged=ilovemyrescue']
+        # profiles = []
+
+
+        # driver.get("https://www.instagram.com/explore/tags/"+hashtag)
         # elem = driver.find_element_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div/a")
         # elem.click()
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        while len(media)<=posts_to_dig:
-            print(len(media))
-            media = driver.find_elements_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div")
+        # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        # while len(media)<=posts_to_dig:
+        #     print(len(media))
+        #     posty = driver.find_elements_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div/a")
+        #
+        #     for p in posty:
+        #         try:
+        #             media.append(p.get_attribute('href'))
+        #         except:
+        #             media.append("NO")
+            # media = driver.find_element_by_xpath("//*[@id='react-root']/section/main/article/div/div/div/div/a").get_attribute('href')
 
-            try:
-                driver.find_element_by_xpath("//a[text()='Load more']").click()
-            except NoSuchElementException:
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-        for dish in media:
-            # ActionChains(driver).move_to_element(dish).perform()
-            link_to_post = dish.find_element_by_xpath("//a").get_attribute("href")
-            dish.click()
-            popup = driver.find_element_by_xpath("//body/div/div/div/div/article")
+            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # time.sleep(random.randint(2,5))
+            # try:
+            #     driver.find_element_by_xpath("//a[text()='Load more']").click()
+            # except NoSuchElementException:
+            #     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+
+        count = 0
+        # with open('parrot.pkl', 'wb') as f:
+        #         pickle.dump(media, f)
+        for post in media:
+            # ActionChains(driver).move_to_element(post).perform()
+
+            # link_to_post = post.find_element_by_xpath("//a").get_attribute("href")
+
+            # post.click()
+            # driver = driver.find_element_by_xpath("//body/div/div/div/div/article")
+
+
             #WebDriverWait(driver, 10).until(EC.presence_of_element_located(hashtag.find_element_by_xpath("//a/div/ul/li/span")))
 
             # IF YOU WANT TO IMPOSE A MINIMUM LIKE COUNT
+
             try:
-                likes_count = lord_giveth_formatting(popup.find_element_by_xpath("//div/section/div/span/span").get_attribute('innerHTML'))
+                driver.get(post)
+                # page_url = driver.current_url
+                # likes_count = lord_giveth_formatting(driver.find_element_by_xpath("//div/section/div/span/span").get_attribute('innerHTML'))
+                likes_count = lord_giveth_formatting(driver.find_element_by_xpath('//*[@id="react-root"]/section/main/div/div/article/div/section/div/span/span').get_attribute('innerHTML'))
+                likes_count = int(likes_count)
+                print(likes_count)
+                vid_or_pic = driver.find_element_by_xpath("//div/section/div/span").get_attribute('innerHTML')
+                post_time = driver.find_element_by_xpath('//div/div/a/time').get_attribute('datetime')
+                print(post_time)
                 if likes_count<thresh_hold:
-                    media.pop(media.index(dish))
+                    media.pop(media.index(post))
                     continue
                 else:
                     while True:
 
                         try:
-                            load_more_comments = popup.find_element_by_xpath("//div/div/ul/li/a[text()[contains(.,' comments')]]")
-                            driver.execute_script("document.querySelector('body div div div div article div div ul li a[role=button]').scrollIntoView(true);")
-
+                            load_more_comments = driver.find_element_by_xpath("//*[@id='react-root']/section/main/div/div/article/div/div/ul/li/a[text()[contains(.,' comments')]]")
+                            driver.execute_script("document.querySelector('section main div div article div div ul li a[role=button]').scrollIntoView(true);")
+                            # react-root > section > main > div > div > article > div._ebcx9 > div._4a48i._277v9 > ul > li a
                             load_more_comments.click()
-                            time.sleep(random.randint(.5,5))
+                            time.sleep(random.randint(4,5))
                         except:
+                            print('broke here')
                             break
-                    post_id = link_to_post  # Todo: extract ID from link?
 
                     # For videos, this grabs VIEWS.  For photos, this grabs LIKES.
-                    # metadata["views"] = popup.find_element_by_xpath("//div/section/div/span/span").get_attribute("innerHTML")
+                    # views = driver.find_element_by_xpath("//div/section/div/span/span").get_attribute("innerHTML")
 
                     comments = []
-                    for comment in popup.find_elements_by_xpath("//div/div/ul/li/span"):
-                        comments.append(comment.get_attribute("text"))
-                    posts[post_id] = comments
+                    for comment in driver.find_elements_by_xpath("//div/div/ul/li/span"):
+                        # print(comment.get_attribute('text'))
+                        comments.append(comment.text)
+
+                    commenters = []
+                    for commenter in driver.find_elements_by_xpath('//div/div/ul/li/a'):
+                        commenters.append(commenter.text)
+
+                    comments = [comments]
+                    commenters = [commenters]
+
+
+                    posts['vid_or_pic'] = vid_or_pic
+                    posts['url'] = post
+                    posts['comments'] = comments
+                    posts['post_time'] = post_time
+                    posts['access_time'] = datetime.datetime.now()
+                    posts['num_likes'] = likes_count
+                    posts['commenter'] = commenters
+
                     temp = pd.DataFrame.from_dict(posts)
-                    temp.to_csv('{}.csv'.format(post_id))
-                    count += 1
-                # name = popup.find_element_by_xpath("//header/div/div/div/a")
+                    temp.to_csv('{}.csv'.format(count))
+
+                # name = driver.find_element_by_xpath("//header/div/div/div/a")
                 # profiles.append(name.get_attribute("href"))
             except NoSuchElementException:
                 continue
             finally:
+
                 driver.back()
             #element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "/html/body/div[3]/div/div[2]/div/div[2]/div/article/header/div/a[@href]")))
             #element.click()
@@ -160,4 +213,8 @@ def hello_buck():
     response.headers['Content-Disposition'] = cd
     response.mimetype = 'text/csv'
 
-    return response
+    # return response
+
+stop = timeit.default_timer()
+
+print(stop - start)
